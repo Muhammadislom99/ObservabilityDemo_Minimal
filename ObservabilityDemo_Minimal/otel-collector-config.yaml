@@ -10,35 +10,38 @@ processors:
   batch:
     timeout: 1s
     send_batch_size: 1024
-    send_batch_max_size: 2048
   
   memory_limiter:
     limit_mib: 512
+    check_interval: 1s
 
 exporters:
-  # Экспорт трейсов в Jaeger / otlp для Jaeger
+  # Экспорт трейсов в Jaeger через OTLP
   otlp/jaeger:
-    endpoint: "jaeger:4317"  # Jaeger принимает OTLP на порту 4317
+    endpoint: "jaeger:4317"
     tls:
       insecure: true
 
-  # Экспорт метрик в Prometheus с поддержкой exemplars
+  # Экспорт метрик в Prometheus
   prometheus:
     endpoint: "0.0.0.0:8889"
     const_labels:
       service: "api"
     enable_open_metrics: true
-    add_metric_suffixes: false
-    # Включаем exemplars для связи метрик с трейсами
-    exemplars:
-      max_exemplars_per_series: 10
-      ttl: "5m"
-  
-  # Для дебага
-  logging:
-    loglevel: info
+
+  # ЗАМЕНИЛ logging на debug
+  debug:
+    verbosity: detailed
+
+extensions:
+  health_check:
+  pprof:
+    endpoint: :1888
+  zpages:
+    endpoint: :55679
 
 service:
+  extensions: [pprof, zpages, health_check]
   telemetry:
     logs:
       level: "info"
@@ -47,11 +50,9 @@ service:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [jaeger]
+      exporters: [otlp/jaeger, debug]  # Исправил имя экспортера
 
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [prometheus]
-
-  extensions: []
+      exporters: [prometheus, debug]   # Исправил имя экспортера

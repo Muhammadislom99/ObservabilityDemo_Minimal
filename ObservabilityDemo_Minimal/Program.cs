@@ -93,11 +93,6 @@ using (var scope = app.Services.CreateScope())
     context.Database.EnsureCreated();
 }
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
 
 app.UseRouting();
 app.MapControllers();
