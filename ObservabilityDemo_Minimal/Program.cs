@@ -20,55 +20,47 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 
 // Настройка OpenTelemetry
 builder.Services.AddOpenTelemetry()
-    .ConfigureResource(resource => resource
-        .AddService("aspnet-core-api", "1.0.0"))
+    .ConfigureResource(r => r.AddService("aspnet-core-api", serviceVersion: "1.0.0"))
     .WithTracing(tracing => tracing
-        .AddAspNetCoreInstrumentation(options =>
-        {
-            // Записываем подробную информацию о HTTP запросах
-            options.RecordException = true;
-            options.EnrichWithHttpRequest = (activity, request) =>
-            {
-                activity.SetTag("http.request.header.user_agent", request.Headers.UserAgent.ToString());
-            };
-            options.EnrichWithHttpResponse = (activity, response) =>
-            {
-                activity.SetTag("http.response.status_code", response.StatusCode);
-            };
-        })
-        .AddEntityFrameworkCoreInstrumentation(options =>
-        {
-            // Включаем детальное логирование SQL запросов
-            options.SetDbStatementForText = true;
-            options.SetDbStatementForStoredProcedure = true;
-            options.EnrichWithIDbCommand = (activity, command) =>
-            {
-                // Добавляем дополнительную информацию о SQL запросах
-                activity.SetTag("db.statement", command.CommandText);
-                activity.SetTag("db.operation", command.CommandType.ToString());
-            };
-        })
+        .AddAspNetCoreInstrumentation(o => { o.RecordException = true; })
         .AddHttpClientInstrumentation()
-        .AddOtlpExporter(options =>
+        .AddSqlClientInstrumentation(o =>
         {
-            options.Endpoint = new Uri(Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT")
-                                       ?? "http://localhost:4317");
-        }))
-    .WithMetrics(metrics => metrics
-        .AddAspNetCoreInstrumentation()
-        .AddHttpClientInstrumentation()
-        .AddRuntimeInstrumentation()
-        .AddProcessInstrumentation()
-        // Добавляем exemplars для связи с трейсами
-        .AddView("http_request_duration", new ExplicitBucketHistogramConfiguration
-        {
-            Boundaries = new double[] { 0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10 }
+            o.SetDbStatementForText = true;
+            o.RecordException = true;
         })
-        .AddOtlpExporter(options =>
+        // важно: OTLP на коллектор
+        .AddOtlpExporter(o =>
         {
-            options.Endpoint = new Uri(Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT")
-                                       ?? "http://localhost:4317");
-        }));
+            o.Endpoint = new Uri("http://otel-collector:4317");
+            o.Protocol = OtlpExportProtocol.Grpc;
+        })
+    )
+    .WithMetrics(metrics =>
+    {
+        metrics
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddRuntimeInstrumentation()
+            .AddMeter("Microsoft.AspNetCore.Hosting", "Microsoft.AspNetCore.Server.Kestrel")
+            // Ключевой момент: включаем exemplars на нужных гистограммах
+            .AddView("http.server.duration", new ExplicitBucketHistogramConfiguration
+            {
+                Boundaries = new double[] { 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10 },
+                ExemplarFilter = new TraceBasedExemplarFilter()
+            })
+            .AddView("http.client.duration", new ExplicitBucketHistogramConfiguration
+            {
+                Boundaries = new double[] { 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10 },
+                ExemplarFilter = new TraceBasedExemplarFilter()
+            })
+            // Экспорт метрик в OTLP -> Коллектор
+            .AddOtlpExporter(o =>
+            {
+                o.Endpoint = new Uri("http://otel-collector:4317");
+                o.Protocol = OtlpExportProtocol.Grpc;
+            });
+    });
 
 // Добавляем ActivitySource для кастомного трейсинга
 builder.Services.AddSingleton(new ActivitySource("aspnet-core-api"));
