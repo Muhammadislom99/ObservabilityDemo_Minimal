@@ -1,0 +1,57 @@
+﻿receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+    send_batch_max_size: 2048
+  
+  memory_limiter:
+    limit_mib: 512
+
+exporters:
+  # Экспорт трейсов в Jaeger / otlp для Jaeger
+  otlp/jaeger:
+    endpoint: "jaeger:4317"  # Jaeger принимает OTLP на порту 4317
+    tls:
+      insecure: true
+
+  # Экспорт метрик в Prometheus с поддержкой exemplars
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    const_labels:
+      service: "api"
+    enable_open_metrics: true
+    add_metric_suffixes: false
+    # Включаем exemplars для связи метрик с трейсами
+    exemplars:
+      max_exemplars_per_series: 10
+      ttl: "5m"
+  
+  # Для дебага
+  logging:
+    loglevel: info
+
+service:
+  telemetry:
+    logs:
+      level: "info"
+  
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [jaeger]
+
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheus]
+
+  extensions: []

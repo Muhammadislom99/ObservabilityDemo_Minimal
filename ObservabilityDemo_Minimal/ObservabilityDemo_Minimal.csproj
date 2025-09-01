@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.19" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.8" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.8">
+          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+          <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="8.0.7" />
+      
+        
+        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+
+        <!-- OpenTelemetry пакеты -->
+        <PackageReference Include="OpenTelemetry" Version="1.12.0" />
+        <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.12.0" />
+        <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.12.0" />
+        <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.12.0" />
+        <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.12.0" />
+        <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.12.0" />
+        <PackageReference Include="OpenTelemetry.Instrumentation.Process" Version="1.12.0-beta.1" />
+        <PackageReference Include="OpenTelemetry.Instrumentation.EntityFrameworkCore" Version="1.12.0-beta.2" />
+        <PackageReference Include="OpenTelemetry.Instrumentation.SqlClient" Version="1.12.0-beta.2" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="Controllers\" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Content Include="..\.dockerignore">
+        <Link>.dockerignore</Link>
+      </Content>
+    </ItemGroup>
+
+</Project>

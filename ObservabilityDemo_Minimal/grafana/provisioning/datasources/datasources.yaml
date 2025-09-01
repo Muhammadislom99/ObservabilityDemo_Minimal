@@ -1,0 +1,36 @@
+﻿apiVersion: 1
+
+datasources:
+  # Prometheus как основной источник метрик
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      # Включаем поддержку exemplars
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: jaeger
+  
+  # Jaeger как источник трейсов
+  - name: Jaeger
+    type: jaeger
+    access: proxy
+    url: http://jaeger:16686
+    uid: jaeger
+    jsonData:
+      # Настройки для связи с Prometheus через exemplars
+      tracesToLogs:
+        datasourceUid: prometheus
+        tags: ['service.name', 'service.version']
+        mappedTags:
+          - key: service.name
+            value: job
+      tracesToMetrics:
+        datasourceUid: prometheus
+        tags:
+          - key: service.name
+            value: job
+      nodeGraph:
+        enabled: true
