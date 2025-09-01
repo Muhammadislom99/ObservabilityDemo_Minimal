@@ -12,6 +12,13 @@ datasources:
       exemplarTraceIdDestinations:
         - name: trace_id
           datasourceUid: jaeger
+          urlDisplayLabel: "View Trace"
+      # Связь с логами
+      derivedFields:
+        - datasourceUid: loki
+          matcherRegex: "trace_id=(\\w+)"
+          name: "TraceID"
+          url: "${__value.raw}"
   
   # Jaeger как источник трейсов
   - name: Jaeger
@@ -22,11 +29,13 @@ datasources:
     jsonData:
       # Настройки для связи с Prometheus через exemplars
       tracesToLogs:
-        datasourceUid: prometheus
+        datasourceUid: loki
         tags: ['service.name', 'service.version']
         mappedTags:
           - key: service.name
             value: job
+        filterByTraceID: true
+        filterBySpanID: false
       tracesToMetrics:
         datasourceUid: prometheus
         tags:
@@ -34,3 +43,24 @@ datasources:
             value: job
       nodeGraph:
         enabled: true
+
+  # Loki для логов
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    uid: loki
+    jsonData:
+      # Связь логов с трейсами
+      derivedFields:
+        - datasourceUid: jaeger
+          matcherRegex: '"traceId":"?(\\w+)"?'
+          name: "TraceID"
+          url: "${__value.raw}"
+          urlDisplayLabel: "View Trace"
+        # Связь логов с метриками  
+        - datasourceUid: prometheus
+          matcherRegex: '"traceId":"?(\\w+)"?'
+          name: "TraceID"
+          url: "${__value.raw}"
+          urlDisplayLabel: "View Metrics"

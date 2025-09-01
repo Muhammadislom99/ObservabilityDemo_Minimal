@@ -1,0 +1,89 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # Сбор логов из Docker контейнеров
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+        filters:
+          - name: label
+            values: ["logging=promtail"]
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)$'
+        target_label: 'container_name'
+        replacement: '${1}'
+      - source_labels: ['__meta_docker_container_log_stream']
+        target_label: 'logstream'
+      - source_labels: ['__meta_docker_container_label_logging']
+        target_label: 'logging'
+    pipeline_stages:
+      # Парсим JSON логи от .NET приложений
+      - json:
+          expressions:
+            level: level
+            message: message
+            timestamp: timestamp
+            trace_id: traceId
+            span_id: spanId
+      # Извлекаем trace_id для связи с трейсами
+      - labels:
+          level:
+          trace_id:
+          span_id:
+      # Форматируем timestamp
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
+      # Добавляем exemplar метки
+      - static_labels:
+          service_name: aspnet-core-api
+
+  # Сбор логов напрямую из файлов контейнеров Docker
+  - job_name: containers
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: containerlogs
+          __path__: /var/lib/docker/containers/*/*-json.log
+    pipeline_stages:
+      # Парсим Docker JSON логи
+      - json:
+          expressions:
+            output: log
+            stream: stream
+            attrs:
+      - json:
+          expressions:
+            tag: attrs.tag
+          source: attrs
+      - regex:
+          expression: (?P<container_name>(?:[^|]*))\|
+          source: tag
+      - timestamp:
+          format: RFC3339Nano
+          source: time
+      - labels:
+          stream:
+          container_name:
+      - output:
+          source: output
+
+  # Системные логи
+  - job_name: syslog
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: syslog
+          __path__: /var/log/syslog

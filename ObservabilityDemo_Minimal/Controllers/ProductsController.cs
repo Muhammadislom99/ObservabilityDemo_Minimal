@@ -42,18 +42,18 @@ namespace ObservabilityDemo_Minimal.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<Product>> GetProduct(int id)
         {
-            using var activity = _activitySource.StartActivity("GetProduct.BusinessLogic");
-            activity?.SetTag("product.id", id);
+            //  using var activity = _activitySource.StartActivity("GetProduct.BusinessLogic");
+            // activity?.SetTag("product.id", id);
 
             var product = await _context.Products.FindAsync(id);
 
             if (product == null)
             {
-                activity?.SetTag("result", "not_found");
+                //    activity?.SetTag("result", "not_found");
                 return NotFound();
             }
 
-            activity?.SetTag("result", "found");
+            //  activity?.SetTag("result", "found");
             return Ok(product);
         }
 

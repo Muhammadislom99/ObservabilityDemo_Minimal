@@ -12,36 +12,30 @@ processors:
     send_batch_size: 1024
   
   memory_limiter:
-    limit_mib: 512
     check_interval: 1s
+    limit_mib: 512
 
 exporters:
-  # Экспорт трейсов в Jaeger через OTLP
+  # Prometheus с правильным синтаксисом
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    namespace: "aspnetcore"
+    enable_open_metrics: true
+    resource_to_telemetry_conversion:
+      enabled: true
+    # Exemplars включаются автоматически при enable_open_metrics: true
+
+  # Jaeger для трейсов
   otlp/jaeger:
     endpoint: "jaeger:4317"
     tls:
       insecure: true
 
-  # Экспорт метрик в Prometheus
-  prometheus:
-    endpoint: "0.0.0.0:8889"
-    const_labels:
-      service: "api"
-    enable_open_metrics: true
-
-  # ЗАМЕНИЛ logging на debug
+  # Для отладки
   debug:
-    verbosity: detailed
-
-extensions:
-  health_check:
-  pprof:
-    endpoint: :1888
-  zpages:
-    endpoint: :55679
+    verbosity: basic
 
 service:
-  extensions: [pprof, zpages, health_check]
   telemetry:
     logs:
       level: "info"
@@ -50,9 +44,11 @@ service:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [otlp/jaeger, debug]  # Исправил имя экспортера
+      exporters: [otlp/jaeger, debug]
 
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [prometheus, debug]   # Исправил имя экспортера
+      exporters: [prometheus, debug]
+
+  extensions: []

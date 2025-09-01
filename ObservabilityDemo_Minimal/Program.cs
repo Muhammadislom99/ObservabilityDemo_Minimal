@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
+using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -18,57 +19,52 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Настройка OpenTelemetry
+// Configure OpenTelemetry with Exemplars support
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource => resource
-        .AddService("aspnet-core-api", "1.0.0"))
+        .AddService("aspnet-core-api"))
     .WithTracing(tracing => tracing
         .AddAspNetCoreInstrumentation(options =>
         {
-            // Записываем подробную информацию о HTTP запросах
             options.RecordException = true;
             options.EnrichWithHttpRequest = (activity, request) =>
             {
-                activity.SetTag("http.request.header.user_agent", request.Headers.UserAgent.ToString());
-            };
-            options.EnrichWithHttpResponse = (activity, response) =>
-            {
-                activity.SetTag("http.response.status_code", response.StatusCode);
+                activity.SetTag("http.request_content_length", request.ContentLength);
+                activity.SetTag("http.scheme", request.Scheme);
+                activity.SetTag("http.host", request.Host.ToString());
             };
         })
         .AddEntityFrameworkCoreInstrumentation(options =>
         {
-            // Включаем детальное логирование SQL запросов
             options.SetDbStatementForText = true;
             options.SetDbStatementForStoredProcedure = true;
-            options.EnrichWithIDbCommand = (activity, command) =>
-            {
-                // Добавляем дополнительную информацию о SQL запросах
-                activity.SetTag("db.statement", command.CommandText);
-                activity.SetTag("db.operation", command.CommandType.ToString());
-            };
         })
-        .AddHttpClientInstrumentation()
-        .AddOtlpExporter(options =>
-        {
-            options.Endpoint = new Uri(Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT")
-                                       ?? "http://localhost:4317");
-        }))
+        .AddOtlpExporter(options => { options.Endpoint = new Uri("http://otel-collector:4317"); }))
     .WithMetrics(metrics => metrics
         .AddAspNetCoreInstrumentation()
-        .AddHttpClientInstrumentation()
         .AddRuntimeInstrumentation()
-        .AddProcessInstrumentation()
-        // Добавляем exemplars для связи с трейсами
-        .AddView("http_request_duration", new ExplicitBucketHistogramConfiguration
-        {
-            Boundaries = new double[] { 0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10 }
-        })
-        .AddOtlpExporter(options =>
-        {
-            options.Endpoint = new Uri(Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT")
+        .AddMeter("Microsoft.AspNetCore.Hosting")
+        .AddMeter("Microsoft.AspNetCore.Server.Kestrel")
+        .AddMeter("System.Net.Http")
+        .AddOtlpExporter(options => { options.Endpoint = new Uri("http://otel-collector:4317"); }));
+
+// Настройка логирования с OpenTelemetry
+builder.Logging.ClearProviders();
+builder.Logging.AddOpenTelemetry(options =>
+{
+    options.SetResourceBuilder(ResourceBuilder.CreateDefault()
+        .AddService("aspnet-core-api", "1.0.0"));
+
+    options.AddOtlpExporter(otlpOptions =>
+    {
+        otlpOptions.Endpoint = new Uri(Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT")
                                        ?? "http://localhost:4317");
-        }));
+    });
+
+    // Включаем корреляцию с трейсами
+    options.IncludeScopes = true;
+    options.IncludeFormattedMessage = true;
+});
 
 // Добавляем ActivitySource для кастомного трейсинга
 builder.Services.AddSingleton(new ActivitySource("aspnet-core-api"));

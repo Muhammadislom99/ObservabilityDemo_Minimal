@@ -15,6 +15,11 @@ services:
       - sqlserver
     networks:
       - observability
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # SQL Server для демонстрации EF Core трейсов
   sqlserver:
@@ -27,28 +32,30 @@ services:
     networks:
       - observability
 
-  # OpenTelemetry Collector
+  # OpenTelemetry Collector - ИСПРАВЛЕННЫЙ
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
-    command: ["--config=/etc/otel-collector-config.yaml"]
+    command: [ "--config=/etc/otel-collector-config.yaml" ]
     volumes:
-      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+      - ./otel-logs:/var/log  # Для доступа к логам
     ports:
       - "4317:4317"   # OTLP gRPC receiver
       - "4318:4318"   # OTLP HTTP receiver
       - "8889:8889"   # Prometheus metrics
+      - "8888:8888"   # Collector metrics
     depends_on:
       - jaeger
       - prometheus
     networks:
       - observability
-    
+
   # Jaeger для трейсов
   jaeger:
     image: jaegertracing/all-in-one:latest
     ports:
-      - "16686:16686"    # Jaeger UI
-      - "14250:14250"    # Jaeger native gRPC
+      - "16686:16686"  # Jaeger UI
+      - "14250:14250"  # gRPC
     environment:
       - COLLECTOR_OTLP_ENABLED=true
     networks:
@@ -60,7 +67,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -71,6 +78,32 @@ services:
     networks:
       - observability
 
+  # Loki для логов
+  loki:
+    image: grafana/loki:3.1.0
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./loki-config.yaml:/etc/loki/local-config.yaml:ro
+      - ./loki-data:/tmp/loki  # Для persistence
+    networks:
+      - observability
+
+  # Promtail для сбора логов
+  promtail:
+    image: grafana/promtail:3.1.0
+    volumes:
+      - ./promtail-config.yaml:/etc/promtail/config.yml:ro
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    networks:
+      - observability
+
   # Grafana для визуализации
   grafana:
     image: grafana/grafana:latest
@@ -78,12 +111,14 @@ services:
       - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_FEATURE_TOGGLES_ENABLE=traceqlEditor
     volumes:
-      - ./grafana/provisioning:/etc/grafana/provisioning
-      - ./grafana/dashboards:/var/lib/grafana/dashboards
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
       - prometheus
       - jaeger
+      - loki
     networks:
       - observability
 
